@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>KlipKu – Editor video</title>
+<style>
+:root{--base:#0f121a;--panel:#171b26;--line:#283042;--text:#e7eaf2;--mute:#8e97ab;--cut:#f2c14e;--sub:#4cc9b0;--off:#2a1f24}
+*{box-sizing:border-box}
+body{margin:0;background:var(--base);color:var(--text);font:14px/1.4 "Segoe UI",system-ui,sans-serif}
+header{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--panel)}
+h1{font-size:18px;margin:0 10px 0 0;font-weight:700;letter-spacing:.2px}
+button,select,input{font:inherit;color:var(--text);background:#202638;border:1px solid var(--line);border-radius:6px;padding:7px 11px;cursor:pointer}
+button:hover:not(:disabled){border-color:var(--cut)}
+button:disabled{opacity:.4;cursor:not-allowed}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--cut);outline-offset:1px}
+.go{background:var(--cut);color:#1b1500;border-color:var(--cut);font-weight:600}
+main{display:grid;grid-template-columns:1fr 330px;gap:12px;padding:12px}
+@media(max-width:860px){main{grid-template-columns:1fr}}
+.stage{position:relative;background:#000;border-radius:8px;display:flex;justify-content:center;min-height:240px}
+video{display:block;max-width:100%;max-height:52vh}
+#cap{position:absolute;left:6%;right:6%;bottom:9%;text-align:center;font-weight:800;font-size:clamp(14px,2.6vw,26px);color:#fff;-webkit-text-stroke:.5px #000;text-shadow:0 2px 6px #000,0 0 3px #000;pointer-events:none}
+#gap{position:absolute;inset:0;background:#000;color:var(--mute);display:none;align-items:center;justify-content:center;text-align:center;padding:20px}
+#empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--mute);text-align:center;padding:20px}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:10px 0}
+.time{font-variant-numeric:tabular-nums;color:var(--mute);margin-left:auto}
+#tl{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 8px 10px;user-select:none;overflow-x:auto}
+#inner{position:relative;min-width:100%;cursor:pointer}
+.ruler{height:16px;position:relative;color:var(--mute);font-size:11px}
+.ruler span{position:absolute;top:0;border-left:1px solid var(--line);padding-left:3px;height:16px}
+.row{position:relative;height:42px;margin-top:6px;background:#10131c;border-radius:4px}
+.row.s{height:30px}
+.seg{position:absolute;top:0;bottom:0;border:1px solid #6a5a2a;background:linear-gradient(#5b4a18,#3f3410);border-radius:4px;overflow:hidden;color:#f6e7b4;font-size:11px;padding:3px 5px;white-space:nowrap}
+.seg.off{background:repeating-linear-gradient(45deg,var(--off),var(--off) 6px,#1d1519 6px,#1d1519 12px);border-style:dashed;border-color:#5b3a45;color:#c58b9b}
+.seg.sel{outline:2px solid #fff;z-index:2}
+.sb{position:absolute;top:3px;bottom:3px;background:#17493f;border:1px solid var(--sub);border-radius:3px;overflow:hidden;font-size:10px;padding:1px 3px;white-space:nowrap;color:#bff3e8}
+#ph{position:absolute;top:0;bottom:0;width:2px;background:var(--cut);pointer-events:none;z-index:5}
+#ph::before{content:"";position:absolute;top:0;left:-5px;border:6px solid transparent;border-top-color:var(--cut)}
+aside{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;max-height:calc(100vh - 100px);overflow:auto}
+aside h2{font-size:15px;margin:0 0 8px}
+#prog{height:6px;background:#10131c;border-radius:3px;overflow:hidden;margin:8px 0;display:none}
+#prog i{display:block;height:100%;width:0;background:var(--sub)}
+#msg{color:var(--mute);font-size:13px;min-height:18px}
+.sr{display:grid;grid-template-columns:52px 1fr 26px;gap:6px;margin-bottom:6px;align-items:start}
+.sr button.t{padding:4px;font-size:12px;color:var(--sub)}
+.sr textarea{width:100%;resize:vertical;min-height:34px;background:#10131c;color:var(--text);border:1px solid var(--line);border-radius:6px;padding:5px 7px;font:inherit;font-size:13px}
+.sr.act textarea{border-color:var(--sub)}
+.sr .x{padding:2px 0;color:var(--mute)}
+.tip{color:var(--mute);font-size:12px;margin-top:8px}
+</style>
+</head>
+<body>
+<header>
+  <h1>KlipKu</h1>
+  <button id="bOpen">Buka video</button>
+  <input type="file" id="file" accept="video/*" hidden>
+  <button id="bSrt" disabled>Unduh .srt</button>
+  <button id="bExp" class="go" disabled>Ekspor video</button>
+  <span id="msg"></span>
+</header>
+<main>
+  <section>
+    <div class="stage">
+      <video id="v" playsinline></video>
+      <div id="cap"></div>
+      <div id="gap">Bagian ini dipotong. Durasi tetap, klip lain tidak bergeser.</div>
+      <div id="empty">Klik “Buka video” untuk mulai.</div>
+    </div>
+    <div class="bar">
+      <button id="bPlay" disabled>Putar</button>
+      <button id="bSplit" disabled>Belah di garis kuning</button>
+      <button id="bDel" disabled>Potong / pulihkan bagian</button>
+      <span class="time" id="tm">0:00.0 / 0:00.0</span>
+    </div>
+    <div id="tl"><div id="inner">
+      <div class="ruler" id="ruler"></div>
+      <div class="row" id="vr"></div>
+      <div class="row s" id="sr"></div>
+      <div id="ph"></div>
+    </div></div>
+    <p class="tip">Pintasan: Spasi putar/jeda, S belah, Delete potong atau pulihkan bagian di garis kuning. Bagian yang dipotong menjadi kosong (hitam dan senyap), jadi posisi semua klip dan subtitle tidak berubah.</p>
+  </section>
+  <aside>
+    <h2>Subtitle otomatis</h2>
+    <div class="bar" style="margin-top:0">
+      <select id="model">
+        <option value="onnx-community/whisper-base">Cepat (base)</option>
+        <option value="onnx-community/whisper-small">Lebih akurat (small)</option>
+      </select>
+      <button id="bAsr" class="go" disabled>Buat subtitle</button>
+    </div>
+    <div id="prog"><i></i></div>
+    <div id="list"><p class="tip">Belum ada subtitle. Model AI diunduh sekali saja (puluhan MB) lalu tersimpan di browser. Setelah itu proses berjalan di perangkat Anda, video tidak diunggah ke mana pun.</p></div>
+  </aside>
+</main>
+<script type="module">
+const $=id=>document.getElementById(id);
+const v=$('v'),cap=$('cap'),gapEl=$('gap');
+let dur=0,segs=[],subs=[],sel=0,file=null,pps=60,audio=null,exporting=false;
+
+const fmt=t=>{t=Math.max(0,t);const m=Math.floor(t/60),s=t-m*60;return m+':'+s.toFixed(1).padStart(4,'0')};
+const say=t=>$('msg').textContent=t||'';
+
+/* ---------- Buka video ---------- */
+$('bOpen').onclick=()=>$('file').click();
+$('file').onchange=e=>{
+  const f=e.target.files[0];if(!f)return;
+  file=f;v.src=URL.createObjectURL(f);
+  v.onloadedmetadata=()=>{
+    dur=v.duration;segs=[{s:0,e:dur,on:true}];subs=[];sel=0;
+    $('empty').style.display='none';
+    ['bPlay','bSplit','bDel','bAsr','bExp'].forEach(i=>$(i).disabled=false);
+    pps=Math.max(20,Math.min(120,($('tl').clientWidth-20)/dur));
+    if(dur*pps<$('tl').clientWidth-20)pps=($('tl').clientWidth-20)/dur;
+    drawAll();say(f.name);
+  };
+};
+
+/* ---------- Potong tanpa menggeser ---------- */
+const segAt=t=>segs.findIndex(s=>t>=s.s&&t<s.e);
+const isOn=t=>{const i=segAt(t);return i<0||segs[i].on};
+function split(){
+  const t=v.currentTime,i=segAt(t);
+  if(i<0||t-segs[i].s<.1||segs[i].e-t<.1)return;
+  const s=segs[i];segs.splice(i,1,{s:s.s,e:t,on:s.on},{s:t,e:s.e,on:s.on});
+  sel=i+1;drawAll();
+}
+function del(){
+  const i=segAt(v.currentTime);if(i<0)return;
+  segs[i].on=!segs[i].on;sel=i;drawAll();
+}
+$('bSplit').onclick=split;$('bDel').onclick=del;
+
+/* ---------- Putar ---------- */
+function ensureAudio(){
+  if(audio)return;
+  const ac=new AudioContext(),src=ac.createMediaElementSource(v),g=ac.createGain(),dest=ac.createMediaStreamDestination();
+  src.connect(g);g.connect(ac.destination);g.connect(dest);audio={ac,g,dest};
+}
+$('bPlay').onclick=()=>{ensureAudio();audio.ac.resume();v.paused?v.play():v.pause()};
+v.onplay=()=>$('bPlay').textContent='Jeda';
+v.onpause=()=>$('bPlay').textContent='Putar';
+document.addEventListener('keydown',e=>{
+  if(!dur||/TEXTAREA|INPUT|SELECT/.test(e.target.tagName))return;
+  if(e.code==='Space'){e.preventDefault();$('bPlay').click()}
+  else if(e.key==='s'||e.key==='S')split();
+  else if(e.key==='Delete'||e.key==='Backspace')del();
+});
+
+/* ---------- Timeline ---------- */
+function drawAll(){
+  const w=dur*pps;$('inner').style.width=Math.max(w,0)+'px';
+  let r='';const step=pps>=50?1:pps>=25?2:5;
+  for(let t=0;t<=dur;t+=step)r+=`<span style="left:${t*pps}px">${Math.floor(t/60)}:${String(t%60).padStart(2,'0')}</span>`;
+  $('ruler').innerHTML=r;
+  $('vr').innerHTML=segs.map((s,i)=>`<div class="seg ${s.on?'':'off'} ${i===sel?'sel':''}" style="left:${s.s*pps}px;width:${(s.e-s.s)*pps}px">${s.on?'Video':'Dipotong'}</div>`).join('');
+  $('sr').innerHTML=subs.map(s=>`<div class="sb" style="left:${s.s*pps}px;width:${Math.max(4,(s.e-s.s)*pps)}px">${esc(s.t)}</div>`).join('');
+}
+const esc=s=>s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+$('inner').addEventListener('click',e=>{
+  if(!dur)return;const x=e.clientX-$('inner').getBoundingClientRect().left;
+  v.currentTime=Math.min(dur-.01,Math.max(0,x/pps));
+  const i=segAt(v.currentTime);if(i>=0){sel=i;drawAll()}
+});
+
+/* ---------- Loop tampilan: subtitle, celah, playhead ---------- */
+const subAt=t=>subs.find(s=>t>=s.s&&t<s.e);
+function loop(){
+  const t=v.currentTime||0,on=isOn(t);
+  if(!exporting){
+    gapEl.style.display=on?'none':'flex';
+    if(audio)audio.g.gain.value=on?1:0;else v.muted=!on;
+    const s=on&&subAt(t);cap.textContent=s?s.t:'';
+    $('ph').style.left=(t*pps)+'px';
+    $('tm').textContent=fmt(t)+' / '+fmt(dur);
+    const i=segAt(t);if(i>=0&&v.paused===false&&i!==sel){sel=i;drawAll()}
+    document.querySelectorAll('.sr').forEach((el,k)=>el.classList.toggle('act',subs[k]&&t>=subs[k].s&&t<subs[k].e));
+  }
+  requestAnimationFrame(loop);
+}
+loop();
+
+/* ---------- Subtitle otomatis (Whisper di browser) ---------- */
+async function pcm16k(f){
+  const ac=new AudioContext(),dec=await ac.decodeAudioData(await f.arrayBuffer());ac.close();
+  const off=new OfflineAudioContext(1,Math.ceil(dec.duration*16000),16000),s=off.createBufferSource();
+  s.buffer=dec;s.connect(off.destination);s.start();
+  return (await off.startRendering()).getChannelData(0);
+}
+function breakLines(s,e,text,max=7){
+  const w=text.trim().split(/\s+/).filter(Boolean);if(!w.length)return[];
+  const n=Math.ceil(w.length/max),per=Math.ceil(w.length/n),out=[],d=(e-s)/w.length;
+  for(let i=0;i<w.length;i+=per){const part=w.slice(i,i+per);out.push({s:s+i*d,e:s+(i+part.length)*d,t:part.join(' ')})}
+  return out;
+}
+$('bAsr').onclick=async()=>{
+  const btn=$('bAsr');btn.disabled=true;$('prog').style.display='block';
+  const bar=$('prog').firstElementChild;
+  try{
+    say('Memuat model AI…');
+    const {pipeline}=await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.0.2/+esm');
+    const opt=d=>({device:d,progress_callback:p=>{if(p.status==='progress'){bar.style.width=p.progress+'%';say('Mengunduh model '+Math.round(p.progress)+'%')}}});
+    let asr;
+    try{asr=await pipeline('automatic-speech-recognition',$('model').value,opt(navigator.gpu?'webgpu':'wasm'))}
+    catch{asr=await pipeline('automatic-speech-recognition',$('model').value,opt('wasm'))}
+    bar.style.width='100%';say('Menyiapkan audio…');
+    const pcm=await pcm16k(file);
+    say('Mengenali ucapan. Ini bisa memakan beberapa menit…');
+    const out=await asr(pcm,{language:'indonesian',task:'transcribe',return_timestamps:true,chunk_length_s:30,stride_length_s:5});
+    subs=[];
+    for(const c of out.chunks){
+      const s=c.timestamp[0]??0,e=c.timestamp[1]??Math.min(dur,s+3);
+      subs.push(...breakLines(s,e,c.text));
+    }
+    renderList();drawAll();$('bSrt').disabled=!subs.length;
+    say(subs.length?'Subtitle selesai. Periksa dan perbaiki teksnya di panel kanan.':'Tidak ada ucapan terdeteksi.');
+  }catch(err){
+    console.error(err);
+    say('Gagal: '+(err.message||err)+'. Pastikan terhubung internet dan buka lewat http(s), bukan file langsung.');
+  }
+  btn.disabled=false;setTimeout(()=>$('prog').style.display='none',800);
+};
+function renderList(){
+  $('list').innerHTML=subs.length?subs.map((s,i)=>`<div class="sr"><button class="t" data-i="${i}">${fmt(s.s)}</button><textarea data-i="${i}" rows="2">${esc(s.t)}</textarea><button class="x" data-d="${i}" title="Hapus baris">×</button></div>`).join(''):'<p class="tip">Belum ada subtitle.</p>';
+}
+$('list').addEventListener('click',e=>{
+  const t=e.target;
+  if(t.dataset.i&&t.tagName==='BUTTON')v.currentTime=subs[+t.dataset.i].s;
+  if(t.dataset.d){subs.splice(+t.dataset.d,1);renderList();drawAll()}
+});
+$('list').addEventListener('input',e=>{if(e.target.tagName==='TEXTAREA'){subs[+e.target.dataset.i].t=e.target.value;drawAll()}});
+
+/* ---------- Unduh SRT ---------- */
+const srtT=t=>{const h=Math.floor(t/3600),m=Math.floor(t%3600/60),s=Math.floor(t%60),ms=Math.round((t%1)*1000);return[h,m,s].map(x=>String(x).padStart(2,'0')).join(':')+','+String(ms).padStart(3,'0')};
+function download(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000)}
+$('bSrt').onclick=()=>{
+  const txt=subs.filter(s=>isOn(s.s)).map((s,i)=>`${i+1}\n${srtT(s.s)} --> ${srtT(s.e)}\n${s.t}\n`).join('\n');
+  download(new Blob([txt],{type:'text/plain'}),'subtitle.srt');
+};
+
+/* ---------- Ekspor (rekam kanvas, waktu nyata) ---------- */
+function wrapText(ctx,text,x,y,maxW,lh){
+  const words=text.split(' ');let line='',lines=[];
+  for(const w of words){const t=line?line+' '+w:w;if(ctx.measureText(t).width>maxW&&line){lines.push(line);line=w}else line=t}
+  lines.push(line);
+  lines.reverse().forEach((l,i)=>{const yy=y-i*lh;ctx.strokeText(l,x,yy);ctx.fillText(l,x,yy)});
+}
+$('bExp').onclick=async()=>{
+  if(!dur)return;ensureAudio();await audio.ac.resume();
+  const c=document.createElement('canvas');c.width=v.videoWidth;c.height=v.videoHeight;
+  const ctx=c.getContext('2d'),fs=Math.round(c.height*.05);
+  const stream=c.captureStream(30);audio.dest.stream.getAudioTracks().forEach(t=>stream.addTrack(t));
+  const mime=['video/mp4;codecs=avc1','video/webm;codecs=vp9,opus','video/webm'].find(m=>MediaRecorder.isTypeSupported(m));
+  const rec=new MediaRecorder(stream,{mimeType:mime,videoBitsPerSecond:8e6}),chunks=[];
+  rec.ondataavailable=e=>e.data.size&&chunks.push(e.data);
+  exporting=true;$('bExp').disabled=true;v.pause();v.currentTime=0;
+  await new Promise(r=>v.onseeked=r);
+  const draw=()=>{
+    if(!exporting)return;
+    const t=v.currentTime,on=isOn(t);
+    ctx.fillStyle='#000';ctx.fillRect(0,0,c.width,c.height);
+    if(on){
+      ctx.drawImage(v,0,0,c.width,c.height);
+      const s=subAt(t);
+      if(s){ctx.font=`800 ${fs}px "Segoe UI",sans-serif`;ctx.textAlign='center';ctx.lineWidth=fs*.14;ctx.lineJoin='round';ctx.strokeStyle='#000';ctx.fillStyle='#fff';wrapText(ctx,s.t,c.width/2,c.height*.92,c.width*.88,fs*1.2)}
+    }
+    audio.g.gain.value=on?1:0;
+    say('Mengekspor… '+Math.round(t/dur*100)+'% (jangan tutup tab ini)');
+    requestAnimationFrame(draw);
+  };
+  rec.start(500);v.play();draw();
+  v.onended=()=>{
+    rec.onstop=()=>{
+      exporting=false;$('bExp').disabled=false;v.onended=null;
+      download(new Blob(chunks,{type:mime.split(';')[0]}),'klipku-hasil.'+(mime.startsWith('video/mp4')?'mp4':'webm'));
+      say('Ekspor selesai.');
+    };
+    rec.stop();
+  };
+};
+</script>
+</body>
+</html>
